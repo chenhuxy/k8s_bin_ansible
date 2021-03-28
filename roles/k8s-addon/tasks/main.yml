@@ -1,0 +1,42 @@
+---
+- name: 'k8s-dashboard安装包'
+  copy: src=files/kubernetes-dashboard-amd64.tar dest=/tmp/kubernetes-dashboard-amd64.tar mode=0644 owner=root group=root force=yes
+
+- name: 'coredns安装包'
+  copy: src=files/coredns.tar dest=/tmp/coredns.tar mode=0644 owner=root group=root force=yes
+
+- name: 'nginx-ingress-controller安装包'
+  copy: src=files/nginx-ingress-controller.tar dest=/tmp/nginx-ingress-controller.tar mode=0644 owner=root group=root force=yes
+
+- name: 'k8s-dashboard脚本'
+  copy: src=files/kubernetes-dashboard-deploy.yaml dest=/tmp/kubernetes-dashboard-deploy.yaml mode=0644 owner=root group=root force=yes
+
+- name: 'coredns脚本'
+  copy: src=files/coredns-deploy.yaml dest=/tmp/coredns-deploy.yaml mode=0644 owner=root group=root force=yes
+
+- name: 'nginx-ingress脚本'
+  copy: src=files/nginx-ingress-deploy.yaml dest=/tmp/nginx-ingress-deploy.yaml mode=0644 owner=root group=root force=yes
+
+- name: '导入k8s-dashaboard镜像'
+  shell: 'docker load -i /tmp/kubernetes-dashboard-amd64.tar'
+
+- name: '导入coredns镜像'
+  shell: 'docker load -i /tmp/coredns.tar'
+
+- name: '导入nginx-ingress-controller镜像'
+  shell: 'docker load -i /tmp/nginx-ingress-controller.tar'
+
+- name: '安装k8s-dashboard'
+  shell: 'kubectl apply -f /tmp/kubernetes-dashboard-deploy.yaml'
+  when: "inventory_hostname not in groups['k8s-node']"
+  ignore_errors: true
+
+- name: '安装coredns'
+  shell: 'kubectl apply -f /tmp/coredns-deploy.yaml'
+  when: "inventory_hostname not in groups['k8s-node']"
+  ignore_errors: true
+
+- name: '安装nginx-ingress'
+  shell: 'kubectl apply -f /tmp/nginx-ingress-deploy.yaml'
+  when: "inventory_hostname not in groups['k8s-node']"
+  ignore_errors: true

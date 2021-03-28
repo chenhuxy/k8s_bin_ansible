@@ -1,0 +1,6 @@
+---
+- name: '配置PATH'
+  copy: src=files/k8s.sh dest=/etc/profile.d/k8s.sh mode=0644 owner=root group=root force=yes
+
+- name: '加载环境变量'
+  shell: 'source /etc/profile'

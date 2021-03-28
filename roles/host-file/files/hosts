@@ -1,0 +1,41 @@
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+10.58.133.2  k8s-master-1.tspqa.com master1
+10.58.133.3  k8s-master-2.tspqa.com master2
+10.58.133.4  k8s-master-3.tspqa.com master3
+10.58.133.5  k8s-node-1.tspqa.com node1
+10.58.133.6  k8s-node-2.tspqa.com node2
+10.58.133.25 k8s-node-3.tspqa.com node3
+10.58.133.8  k8s-node-4.tspqa.com node4
+10.58.133.9  k8s-node-5.tspqa.com node5
+10.58.133.11 k8s-lb-1 lb
+10.58.133.36 k8s-lb-2 lb-2
+10.58.133.24 gitlab.tspqa.com gitlab
+10.58.133.10 app-1
+10.58.133.35 app-2
+10.58.133.12 nginx-1
+10.58.133.37 nginx-2
+10.58.133.14 kafka-1
+10.58.133.38 kafka-2
+10.58.133.39 kafka-3
+10.58.133.15 zookeeper-1
+10.58.133.40 zookeeper-2
+10.58.133.41 zookeeper-3
+10.58.133.16 logstash-1
+10.58.133.42 logstash-2
+10.58.133.43 logstash-3
+10.58.133.18 flink-1
+10.58.133.46 flink-2
+10.58.133.19 redis minio
+10.58.133.20 mysql codo node7 k8s-node-7.tspqa.com
+10.58.133.21 k8s-node-6.tspqa.com node6 mongo
+10.58.133.23 es-1
+10.58.133.44 es-2
+10.58.133.45 es-3
+10.181.18.68 hub.qoros.com
+10.58.133.13  k8s-node-8.tspqa.com node8
+10.58.133.31  k8s-node-9.tspqa.com node9
+10.58.133.32  k8s-node-10.tspqa.com node10
+10.58.133.33  k8s-node-11.tspqa.com node11
+10.58.133.34  k8s-node-12.tspqa.com node12

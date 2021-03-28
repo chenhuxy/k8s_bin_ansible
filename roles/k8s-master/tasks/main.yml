@@ -1,0 +1,25 @@
+---
+- name: '配置k8s-master脚本'
+  copy: src=files/02_k8s-bin-master-calico.sh dest=/tmp/02_k8s-bin-master-calico.sh mode=0700 owner=root group=root force=yes
+
+- name: 'k8s安装包'
+  copy: src=files/kubernetes-server-linux-amd64.tar.gz dest=/tmp/kubernetes-server-linux-amd64.tar.gz mode=0644 owner=root group=root force=yes
+
+- name: 'pause 安装包'
+  copy: src=files/pause-amd64.tar dest=/tmp/pause-amd64.tar mode=0644 owner=root group=root force=yes
+
+- name: 'calico rbac配置'
+  copy: src=files/rbac.yaml dest=/tmp/rbac.yaml mode=0644 owner=root group=root force=yes
+
+- name: 'calico calico配置'
+  copy: src=files/calico.yaml dest=/tmp/calico.yaml mode=0644 owner=root group=root force=yes
+
+- name: 'calico kube-controllers安装包'
+  copy: src=files/calico_kube-controllers.tar dest=/tmp/calico_kube-controllers.tar mode=0644 owner=root group=root force=yes
+
+- name: 'calico node安装包'
+  copy: src=files/calico_node.tar dest=/tmp/calico_node.tar mode=0644 owner=root group=root force=yes
+
+- name: 'calico cni安装包'
+  copy: src=files/calico_cni.tar dest=/tmp/calico_cni.tar mode=0644 owner=root group=root force=yes
+

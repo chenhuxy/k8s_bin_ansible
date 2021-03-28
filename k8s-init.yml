@@ -1,0 +1,7 @@
+- hosts:
+  - k8s-master
+  - k8s-node
+  - gitlab
+  - mysql
+  roles:
+  - k8s-init

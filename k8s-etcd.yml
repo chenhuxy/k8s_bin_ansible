@@ -1,0 +1,4 @@
+- hosts:
+  - k8s-etcd
+  roles:
+  - k8s-etcd

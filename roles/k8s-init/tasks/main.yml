@@ -1,0 +1,12 @@
+---
+- name: '配置init脚本'
+  copy: src=files/00_init.sh dest=/tmp/00_init.sh mode=0700 owner=root group=root force=yes
+
+- name: 'docker安装包'
+  copy: src=files/docker-ce-19.03.9-3.el7.x86_64.rpm dest=/tmp/docker-ce-19.03.9-3.el7.x86_64.rpm mode=0644 owner=root group=root force=yes
+
+- name: 'docker-cli安装包'
+  copy: src=files/docker-ce-cli-19.03.9-3.el7.x86_64.rpm dest=/tmp/docker-ce-cli-19.03.9-3.el7.x86_64.rpm mode=0644 owner=root group=root force=yes
+
+- name: 'containerd安装包'
+  copy: src=files/containerd.io-1.2.6-3.3.el7.x86_64.rpm dest=/tmp/containerd.io-1.2.6-3.3.el7.x86_64.rpm mode=0644 owner=root group=root force=yes

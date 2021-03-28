@@ -1,0 +1,15 @@
+---
+- name: '配置k8s-etcd脚本'
+  template: src=01_etcd.sh.j2 dest=/tmp/01_etcd.sh mode=0700 owner=root group=root force=yes
+
+- name: 'etcd安装包'
+  copy: src=files/etcd-v3.3.17-linux-amd64.tar.gz dest=/tmp/etcd-v3.3.17-linux-amd64.tar.gz mode=0644 owner=root group=root force=yes
+
+- name: 'cfssl'
+  copy: src=files/cfssl_linux-amd64 dest=/usr/local/bin/cfssl mode=0755 owner=root group=root force=yes
+
+- name: 'cfssljson'
+  copy: src=files/cfssljson_linux-amd64 dest=/usr/local/bin/cfssljson mode=0755 owner=root group=root force=yes
+
+- name: 'cfssl'
+  copy: src=files/cfssl-certinfo_linux-amd64 dest=/usr/local/bin/cfssl-certinfo mode=0755 owner=root group=root force=yes

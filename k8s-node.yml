@@ -1,0 +1,4 @@
+- hosts:
+  - k8s-node
+  roles:
+  - k8s-node
