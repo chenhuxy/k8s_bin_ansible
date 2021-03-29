@@ -66,7 +66,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
         
     5.  安装docker
 
-        下载release下docker安装包放至 k8s-init role下
+        下载release下docker/containerd安装包放至 k8s-init role下
         
         ansible-playbook k8s-init.yaml
         
