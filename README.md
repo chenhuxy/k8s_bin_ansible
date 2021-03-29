@@ -78,7 +78,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
         
         至master机器执行 /tmp/00_init.sh;(报错再执行一遍即可)
         
-        /tmp/02_k8s_master_calico.sh install
+        /tmp/02_k8s_master_calico.sh install（卸载：uninstall，重装：reinstall）
         
     7.  安装k8s-node
     
@@ -88,7 +88,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
         
         至node机器执行 /tmp/00_init.sh;(报错再执行一遍即可)
         
-        /tmp/03_k8s_node_calico.sh install
+        /tmp/03_k8s_node_calico.sh install（卸载：uninstall，重装：reinstall）
         
     8. 添加环境变量
     
