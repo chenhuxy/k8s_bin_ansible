@@ -60,7 +60,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
         
         ansible-playbook k8s-etcd.yaml
         
-        至master机器执行 /tmp/01_etcd.sh install
+        至master机器执行 /tmp/01_etcd.sh install（卸载：uninstall，重装：reinstall）
         
         
         
