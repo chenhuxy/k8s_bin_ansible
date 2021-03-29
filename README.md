@@ -68,13 +68,13 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
 
         下载release下docker/containerd安装包放至 k8s-init role下
         
-        ansible-playbook k8s-init.yaml
+        ansible-playbook k8s-init.yml
         
     6.  安装k8s-master
     
         下载release下kubernetes/calico/pause安装包至k8s-master role下
         
-        ansible-playbook k8s-master.yaml
+        ansible-playbook k8s-master.yml
         
         至master机器执行 /tmp/00_init.sh;(报错再执行一遍即可)
         
@@ -84,7 +84,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
     
         下载release下kubernetes/calico/pause安装包至k8s-node role下
         
-        ansible-playbook k8s-node.yaml
+        ansible-playbook k8s-node.yml
         
         至node机器执行 /tmp/00_init.sh;(报错再执行一遍即可)
         
@@ -102,7 +102,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
 
         下载release下coredns/dashboard/ingress-nginx安装包至k8s-addon role下
         
-        ansible-playbook k8s-addon.yaml
+        ansible-playbook k8s-addon.yml
         
         查看pod，svc：
         
