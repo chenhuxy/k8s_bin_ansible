@@ -72,7 +72,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
         
     6.  安装k8s-master
     
-        下载release下kubernetes/calico安装包至k8s-master role下
+        下载release下kubernetes/calico/pause安装包至k8s-master role下
         
         ansible-playbook k8s-master.yaml
         
@@ -82,7 +82,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
         
     7.  安装k8s-node
     
-        下载release下kubernetes/calico安装包至k8s-node role下
+        下载release下kubernetes/calico/pause安装包至k8s-node role下
         
         ansible-playbook k8s-node.yaml
         
@@ -97,6 +97,16 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
     9.  查看集群状态
 
         kubectl get nodes；kubectl get cs
+        
+    10. 安装集群插件，coredns/dashboard/ingress
+
+        下载release下coredns/dashboard/ingress-nginx安装包至k8s-addon role下
+        
+        ansible-playbook k8s-addon.yaml
+        
+        查看pod，svc：
+        
+        kubectl get pods,svc -A -o wide
 
         
         
