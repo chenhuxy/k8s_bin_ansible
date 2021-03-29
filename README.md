@@ -30,7 +30,7 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
     
     4. systemctl start --now ansible
     
-    5. 免密登录工具在tool目录下
+    5. 免密登录工具在tools目录下
     
 
 安装步骤：
