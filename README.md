@@ -25,6 +25,8 @@ k8s version：v1.15.0，所有安装包已下载，适合内网环境直接安�
     2. mv /etc/ansible  /etc/ansible.default
 
     3. git clone https://github.com/chenhuxy/k8s_bin_ansible.git
+        
+        mv k8s_bin_ansible /etc/ansible
     
     4. systemctl start --now ansible
     
