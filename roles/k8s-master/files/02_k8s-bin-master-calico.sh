@@ -15,6 +15,9 @@ sslDir=/opt/kubernetes/ssl
 binDir=/opt/kubernetes/bin
 serviceDir=/usr/lib/systemd/system
 ip=`ip a |egrep '(eth[0-9]|ens[0-9]{2,})' |awk '/inet/ {print $2}' |cut -d/ -f1`
+KUBERNETES_CLUSTER_CIDR=10.0.0.0/24  #集群serviceIP网段，不建议修改
+KUBERNETES_IP=10.0.0.1               #集群kubernetesServiceIP，不建议修改
+KUBERNETES_DNS_IP=10.0.0.2           #集群dnsServcieIP，不建议修改
 
 init(){
 mkdir -p /opt/kubernetes/{bin,cfg,ssl,package}
@@ -86,7 +89,7 @@ cat >  server-csr.json << EOF
 {
     "CN": "kubernetes",
     "hosts": [
-      "10.0.0.1",
+      "$KUBERNETES_IP",
       "127.0.0.1",
       "$apiserver01",
       "$apiserver02",
@@ -275,7 +278,7 @@ KUBE_APISERVER_OPTS="--logtostderr=true \
 --port=0 \
 --advertise-address=$ip \
 --allow-privileged=true \
---service-cluster-ip-range=10.0.0.0/24 \
+--service-cluster-ip-range=$KUBERNETES_CLUSTER_CIDR \
 --enable-admission-plugins=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,NodeRestriction \
 --authorization-mode=RBAC,Node \
 --enable-bootstrap-token-auth \
@@ -450,7 +453,7 @@ KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=true \
 --v=4 \
 --kubeconfig=$cfgDir/kube-controller-manager.kubeconfig \
 --leader-elect=true \
---service-cluster-ip-range=10.0.0.0/24 \
+--service-cluster-ip-range=$KUBERNETES_CLUSTER_CIDR \
 --cluster-name=kubernetes \
 --cluster-signing-cert-file=$sslDir/ca.pem \
 --cluster-signing-key-file=$sslDir/ca-key.pem  \
@@ -540,7 +543,7 @@ apiVersion: kubelet.config.k8s.io/v1beta1
 port: 10250
 readOnlyPort: 10255
 cgroupDriver: cgroupfs
-clusterDNS: ["10.0.0.2"]
+clusterDNS: ["$KUBERNETES_DNS_IP"]
 clusterDomain: cluster.local.
 failSwapOn: false
 feature-gates:
@@ -604,7 +607,7 @@ apiVersion: kubelet.config.k8s.io/v1beta1
 port: 10250
 readOnlyPort: 10255
 cgroupDriver: cgroupfs
-clusterDNS: ["10.0.0.2"]
+clusterDNS: ["$KUBERNETES_DNS_IP"]
 clusterDomain: cluster.local.
 failSwapOn: false
 feature-gates:
@@ -657,7 +660,7 @@ cd $cfgDir
 cat >  kube-proxy  << EOF
 KUBE_PROXY_OPTS="--logtostderr=true \
 --v=4 \
---cluster-cidr=10.0.0.0/24 \
+--cluster-cidr=$KUBERNETES_CLUSTER_CIDR \
 --kubeconfig=$cfgDir/kube-proxy.kubeconfig \
 --proxy-mode=ipvs \
 --metrics-bind-address=0.0.0.0"
@@ -729,7 +732,8 @@ sed -i "s#__KUBECONFIG_FILEPATH__#/etc/cni/net.d/calico-kubeconfig#g" $cniDir/ca
 
 $binDir/kubectl apply -f $cniDir/calico.yaml
 sleep 30
-sed -ri "s#https://\[10.0.0.1\]:443#$KUBE_APISERVER#" /etc/cni/net.d/calico-kubeconfig
+#sed -ri "s#https://\[10.0.0.1\]:443#$KUBE_APISERVER#" /etc/cni/net.d/calico-kubeconfig
+sed -ri "s#https://\[$KUBERNETES_IP\]:443#$KUBE_APISERVER#" /etc/cni/net.d/calico-kubeconfig
 systemctl restart kubelet
 
 }
@@ -739,7 +743,8 @@ echo -e "\033[32;1m-------------------------------------------------------------
 [ -d $etcd_sslDir ] || mkdir -p $etcd_sslDir
 scp $etcd01:$etcd_sslDir/* $etcd_sslDir/
 sleep 30
-sed -ri "s#https://\[10.0.0.1\]:443#$KUBE_APISERVER#" /etc/cni/net.d/calico-kubeconfig
+#sed -ri "s#https://\[10.0.0.1\]:443#$KUBE_APISERVER#" /etc/cni/net.d/calico-kubeconfig
+sed -ri "s#https://\[$KUBERNETES_IP\]:443#$KUBE_APISERVER#" /etc/cni/net.d/calico-kubeconfig
 systemctl restart kubelet
 
 }
@@ -764,6 +769,7 @@ uninstall(){
     rm -f /usr/lib/systemd/system/kube-controller-manager.service
     rm -rf /opt/kubernetes
     rm -rf ~/.kube
+    rm -rf /etc/cni/net.d
     for i in `docker ps -a |awk '/k8s/ {print $1}'`;do docker rm -f $i;done
 }
 case "$1" in

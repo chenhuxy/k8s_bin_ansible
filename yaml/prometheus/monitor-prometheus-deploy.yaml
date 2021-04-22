@@ -1,0 +1,1238 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yaml: |
+    alerting:
+      alertmanagers:
+        - static_configs:
+          - targets: ['alertmanager:9093']
+    global:
+      # 抓取的间隔时间
+      scrape_interval: 20s
+      # How long until a scrape request times out.
+      scrape_timeout: 10s
+      # 计算告警触发条件的周期
+      evaluation_interval: 20s
+    # 告警规则文件
+    rule_files:
+      - '/etc/prometheus-rules/*.rules'
+    scrape_configs:
+      - job_name: 'alertmanager'
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        # 只保留含有label为prometheus/io=scrape的service
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_namespace, __meta_kubernetes_service_name]
+          regex: true;kube-system;alertmanager
+          action: keep
+      - job_name: 'kubelet'
+        # 通过https访问apiserver，通过apiserver的api获取数据
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等 
+        kubernetes_sd_configs:
+        # 从k8s的node对象获取数据
+        - role: node
+        relabel_configs:
+        # 用新的前缀代替原label name前缀，没有replacement的话功能就是去掉label_name前缀
+        # 例如：以下两句的功能就是将__meta_kubernetes_node_label_kubernetes_io_hostname
+        # 变为kubernetes_io_hostname
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        # replacement中的值将会覆盖target_label中指定的label name的值,
+        # 即__address__的值会被替换为kubernetes.default.svc:443
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+          #replacement: 10.142.21.21:6443
+        # 获取__meta_kubernetes_node_name的值
+        - source_labels: [__meta_kubernetes_node_name]
+          #匹配一个或多个任意字符，将上述source_labels的值生成变量
+          regex: (.+)
+          # 将# replacement中的值将会覆盖target_label中指定的label name的值,
+          # 即__metrics_path__的值会被替换为/api/v1/nodes/${1}/proxy/metrics,
+          # 其中${1}的值会被替换为__meta_kubernetes_node_name的值
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+        #or:
+        #- source_labels: [__address__]
+        #  regex: '(.*):10250'
+        #  replacement: '${1}:4194'
+        #  target_label: __address__
+        #- source_labels: [__meta_kubernetes_node_label_role]
+        #  action: replace
+        #  target_label: role
+      - job_name: 'cadvisor'
+        # 通过https访问apiserver，通过apiserver的api获取数据
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等 
+        kubernetes_sd_configs:
+        # 从k8s的node对象获取数据
+        - role: node
+
+        relabel_configs:
+        # 用新的前缀代替原label name前缀，没有replacement的话功能就是去掉label name前缀
+        # 例如：以下两句的功能就是将__meta_kubernetes_node_label_kubernetes_io_hostname
+        # 变为kubernetes_io_hostname
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+
+        # replacement中的值将会覆盖target_label中指定的label name的值,
+        # 即__address__的值会被替换为kubernetes.default.svc:443
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+
+        # 获取__meta_kubernetes_node_name的值
+        - source_labels: [__meta_kubernetes_node_name]
+          #匹配一个或多个任意字符，将上述source_labels的值生成变量
+          regex: (.+)
+          # replacement中的值将会覆盖target_label中指定的label name的值,
+          # 即__metrics_path__的值会被替换为/api/v1/nodes/${1}/proxy/metrics,
+          # 其中${1}的值会被替换为__meta_kubernetes_node_name的值
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+        metric_relabel_configs:
+          - action: replace
+            source_labels: [id]
+            regex: '^/machine\.slice/machine-rkt\\x2d([^\\]+)\\.+/([^/]+)\.service$'
+            target_label: rkt_container_name
+            replacement: '${2}-${1}'
+          - action: replace
+            source_labels: [id]
+            regex: '^/system\.slice/(.+)\.service$'
+            target_label: systemd_service_name
+            replacement: '${1}'
+      - job_name: 'prometheus-node-exporter'
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        #The endpoints role discovers targets from listed endpoints of a service. For each 
+        #endpoint address one target is discovered per port. If the endpoint is backed by
+        #a pod, all additional container ports of the pod, not bound to an endpoint port,
+        #are discovered as targets as well
+        - role: endpoints
+        relabel_configs:
+        # 只保留endpoints的annotations中含有prometheus.io/scrape: 'true'和port的name为prometheus-node-exporter的endpoint
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_endpoint_port_name]
+          regex: true;prometheus-node-exporter
+          action: keep
+        # Match regex against the concatenated source_labels. Then, set target_label to replacement, 
+        # with match group references (${1}, ${2}, ...) in replacement substituted by their value. 
+        # If regex does not match, no replacement takes place.
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+)(?::\d+);(\d+)
+          replacement: $1:$2
+        # 去掉label name中的前缀__meta_kubernetes_service_label_
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        # 将__meta_kubernetes_namespace重命名为kubernetes_namespace
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        # 将__meta_kubernetes_service_name重命名为kubernetes_name
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+      - job_name: 'kube-state-metrics'
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        #The endpoints role discovers targets from listed endpoints of a service. For each
+        #endpoint address one target is discovered per port. If the endpoint is backed by
+        #a pod, all additional container ports of the pod, not bound to an endpoint port,
+        #are discovered as targets as well
+        - role: endpoints
+        relabel_configs:
+        # 只保留endpoint中的annotations含有prometheus.io/scrape: 'true'和port的name为prometheus-node-exporter的endpoint
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape,__meta_kubernetes_endpoint_port_name]
+          regex: true;kube-state-metrics
+          action: keep
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+)(?::\d+);(\d+)
+          replacement: $1:$2
+        # 去掉label name中的前缀__meta_kubernetes_service_label_
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        # 将__meta_kubernetes_namespace重命名为kubernetes_namespace
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        # 将__meta_kubernetes_service_name重命名为kubernetes_name
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+      ## kubernetes-services and kubernetes-ingresses are blackbox_exporter related
+
+      # Example scrape config for probing services via the Blackbox Exporter.
+      # 
+      # The relabeling allows the actual service scrape endpoint to be configured
+      # for all or only some services.
+      - job_name: 'kubernetes-service-http-probe'
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: service
+        # 将metrics_path由默认的/metrics改为/probe
+        metrics_path: /probe
+        # Optional HTTP URL parameters.
+        # 生成__param_module="http_2xx"的label
+        params:
+          module: [http_2xx]
+        relabel_configs:
+        # 只保留含有label为prometheus/io=scrape的service
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_service_annotation_prometheus_io_http_probe]
+          regex: true;true
+          action: keep
+        - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_namespace, __meta_kubernetes_service_annotation_prometheus_io_http_probe_port, __meta_kubernetes_service_annotation_prometheus_io_http_probe_path]
+          action: replace
+          target_label: __param_target
+          regex: (.+);(.+);(.+);(.+)
+          replacement: $1.$2:$3$4
+        # 用__address__这个label的值创建一个名为__param_target的label为blackbox-exporter,值为内部service的访问地址，作为blackbox-exporter采集用
+        #- source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_http_probe_path]
+        #  action: replace
+        #  target_label: __param_target
+        #  regex: (.+);(.+)
+        #  replacement: $1$2
+        # 用blackbox-exporter的service地址值”prometheus-blackbox-exporter:9115"替换原__address__的值
+        - target_label: __address__
+          replacement: prometheus-blackbox-exporter:9115
+        - source_labels: [__param_target]
+          target_label: instance
+        # 去掉label name中的前缀__meta_kubernetes_service_annotation_prometheus_io_app_info_
+        - action: labelmap
+          regex: __meta_kubernetes_service_annotation_prometheus_io_app_info_(.+)
+        #- source_labels: [__meta_kubernetes_namespace]
+        #  target_label: kubernetes_namespace
+        #- source_labels: [__meta_kubernetes_service_name]
+        #  target_label: kubernetes_name
+      ## kubernetes-services and kubernetes-ingresses are blackbox_exporter related
+
+      # Example scrape config for probing services via the Blackbox Exporter.
+      # 
+      # The relabeling allows the actual service scrape endpoint to be configured
+      # for all or only some services.
+
+      # Example scrape config for probing services via the Blackbox Exporter.
+      # 
+      # The relabeling allows the actual service scrape endpoint to be configured
+      # for all or only some services.
+      - job_name: 'blackbox_http_2xx'
+        scrape_interval: 45s
+        metrics_path: /probe
+        params:
+          module: [http_post_2xx_gpsWeatherAir]  # Look for a HTTP 200 response.
+        static_configs:
+        - targets:
+          - http://10.181.2.59:8080/api/v1/tsp-cpsp/hsaeyz/1_0_0/gpsWeatherAir
+        relabel_configs:
+        - source_labels: [__address__]
+          target_label: __param_target
+        - source_labels: [__param_target]
+          target_label: instance
+        - target_label: __address__
+          replacement: prometheus-blackbox-exporter:9115  # The blackbox exporter's real hostname:port.
+
+      - job_name: 'kubernetes-service-tcp-probe'
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: service
+        # 将metrics_path由默认的/metrics改为/probe
+        metrics_path: /probe
+        # Optional HTTP URL parameters.
+        # 生成__param_module="tcp_connect"的label
+        params:
+          module: [tcp_connect]
+        relabel_configs:
+        # 只保留含有label为prometheus/io=scrape的service
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_service_annotation_prometheus_io_tcp_probe]
+          regex: true;true
+          action: keep
+        - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_namespace, __meta_kubernetes_service_annotation_prometheus_io_tcp_probe_port]
+          action: replace
+          target_label: __param_target
+          regex: (.+);(.+);(.+)
+          replacement: $1.$2:$3
+        # 用__address__这个label的值创建一个名为__param_target的label为blackbox-exporter,值为内部service的访问地址，作为blackbox-exporter采集用
+        #- source_labels: [__address__]
+        #  target_label: __param_target
+        # 用blackbox-exporter的service地址值”prometheus-blackbox-exporter:9115"替换原__address__的值
+        - target_label: __address__
+          replacement: prometheus-blackbox-exporter:9115
+        - source_labels: [__param_target]
+          target_label: instance
+        # 去掉label name中的前缀__meta_kubernetes_service_annotation_prometheus_io_app_info_
+        - action: labelmap
+          regex: __meta_kubernetes_service_annotation_prometheus_io_app_info_(.+)
+        #- source_labels: [__meta_kubernetes_namespace]
+        #  target_label: kubernetes_namespace
+        #- source_labels: [__meta_kubernetes_service_name]
+        #  target_label: kubernetes_name
+      - job_name: 'kubernetes-app-metrics'
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        #The endpoints role discovers targets from listed endpoints of a service. For each
+        #endpoint address one target is discovered per port. If the endpoint is backed by
+        #a pod, all additional container ports of the pod, not bound to an endpoint port,
+        #are discovered as targets as well
+        - role: endpoints
+        relabel_configs:
+        # 只保留endpoint中含有prometheus.io/scrape: 'true'的annotation的endpoint
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_service_annotation_prometheus_io_app_metrics]
+          regex: true;true
+          action: keep
+        # 将用户指定的进程的metrics_path替换默认的metrics_path
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_app_metrics_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        # 用pod_ip和用户指定的进程的metrics端口组合成真正的可以拿到数据的地址来替换原始__address__
+        - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_service_annotation_prometheus_io_app_metrics_port]
+          action: replace
+          target_label: __address__
+          regex: (.+);(.+)
+          replacement: $1:$2
+        # 去掉label name中的前缀__meta_kubernetes_service_annotation_prometheus_io_app_info_
+        - action: labelmap
+          regex: __meta_kubernetes_service_annotation_prometheus_io_app_info_(.+)
+        ## 将__meta_kubernetes_namespace重命名为kubernetes_namespace
+        #- source_labels: [__meta_kubernetes_namespace]
+        #  action: replace
+        #  target_label: kubernetes_namespace
+        ## 将__meta_kubernetes_service_name重命名为kubernetes_name
+        #- source_labels: [__meta_kubernetes_service_name]
+        #  action: replace
+        #  target_label: kubernetes_name
+      # 监控自身
+      - job_name: 'prometheus'
+        # 目标通过static_configs参数进行静态配置
+        static_configs:
+        - targets: ['localhost:9090']  #prometheus 启动的端口
+      - job_name: 'kube-apiservers'
+        # 通过https访问apiserver
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等
+        kubernetes_sd_configs:
+        # 从endpoints获取apiserver数据
+        - role: endpoints
+        #relabel_configs允许在抓取之前对任何目标及其标签进行修改。
+        relabel_configs:
+        # 选择哪些label
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          # 上述选择的label的值需要与下述对应
+          regex: default;kubernetes;https
+          # 含有符合regex的source_label的endpoints进行保留
+          action: keep
+      - job_name: 'kube-controller-manager'
+        # 通过https访问apiserver
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等
+        kubernetes_sd_configs:
+        # 从endpoints获取apiserver数据
+        - role: endpoints
+        #relabel_configs允许在抓取之前对任何目标及其标签进行修改。
+        relabel_configs:
+        # 选择哪些label
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_namespace, __meta_kubernetes_service_name]
+          # 上述选择的label的值需要与下述对应
+          regex: true;kube-system;kube-controller-manager-prometheus-discovery
+          # 含有符合regex的source_label的endpoints进行保留
+          action: keep
+      - job_name: 'kube-scheduler'
+        # 通过https访问apiserver
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等
+        kubernetes_sd_configs:
+        # 从endpoints获取apiserver数据
+        - role: endpoints
+        #relabel_configs允许在抓取之前对任何目标及其标签进行修改。
+        relabel_configs:
+        # 选择哪些label
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_namespace, __meta_kubernetes_service_name]
+          # 上述选择的label的值需要与下述对应
+          regex: true;kube-system;kube-scheduler-prometheus-discovery
+          # 含有符合regex的source_label的endpoints进行保留
+          action: keep
+      - job_name: 'etcd'
+        # 通过https访问apiserver
+        scheme: https
+        tls_config:
+          cert_file: /etc/etcd-certs/server.crt
+          key_file: /etc/etcd-certs/server.key
+          insecure_skip_verify: true
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等
+        kubernetes_sd_configs:
+        # 从endpoints获取apiserver数据
+        - role: endpoints
+        #relabel_configs允许在抓取之前对任何目标及其标签进行修改。
+        relabel_configs:
+        # 选择哪些label
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_namespace, __meta_kubernetes_service_name]
+          # 上述选择的label的值需要与下述对应
+          regex: true;kube-system;etcd-prometheus-discovery
+          # 含有符合regex的source_label的endpoints进行保留
+          action: keep
+      - job_name: 'kube-proxy'
+        # 通过https访问apiserver
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        #以k8s的角色(role)来定义收集，比如node,service,pod,endpoints,ingress等等
+        kubernetes_sd_configs:
+        # 从endpoints获取apiserver数据
+        - role: endpoints
+        #relabel_configs允许在抓取之前对任何目标及其标签进行修改。
+        relabel_configs:
+        # 选择哪些label
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape, __meta_kubernetes_namespace, __meta_kubernetes_service_name]
+          # 上述选择的label的值需要与下述对应
+          regex: true;kube-system;kube-proxy-prometheus-discovery
+          # 含有符合regex的source_label的endpoints进行保留
+          action: keep
+#      - job_name: 'kubernetes-ingresses'
+#
+#        tls_config:
+#          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+#        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+#
+#        kubernetes_sd_configs:
+#          - role: ingress
+#
+#        metrics_path: /probe
+#
+#        # Optional HTTP URL parameters.
+#        # 生成__param_module="http_2xx"的label
+#        params:
+#          module: [http_2xx]
+#
+#        relabel_configs:
+#          # 只保留含有label为prometheus/io=scrape的service
+#          - source_labels: [__meta_kubernetes_ingress_annotation_prometheus_io_scrape]
+#            action: keep
+#            regex: true
+#          # 用这三个label拼凑一个名为__param_target的新label,label值为从外部访问的ingress地址，作为blackbox-exporter采集用
+#          - source_labels: [__meta_kubernetes_ingress_scheme,__address__,__meta_kubernetes_ingress_path]
+#            regex: (.+);(.+);(.+)
+#            replacement: ${1}://${2}${3}
+#            target_label: __param_target
+#          # 用blackbox-exporter的service地址值”prometheus-blackbox-exporter:9115"替换原__address__的值
+#          - target_label: __address__
+#            replacement: prometheus-blackbox-exporter:9115
+#          - source_labels: [__param_target]
+#            target_label: instance
+#          # 将含有__meta_kubernetes_ingress_label_前缀的label名中的前缀去掉
+#          - action: labelmap
+#            regex: __meta_kubernetes_ingress_label_(.+)
+#          - source_labels: [__meta_kubernetes_namespace]
+#            target_label: kubernetes_namespace
+#          - source_labels: [__meta_kubernetes_ingress_name]
+#            target_label: kubernetes_name
+
+#      - job_name: kubernetes-service-endpoints
+#
+#        tls_config:
+#          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+#        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+#        kubernetes_sd_configs:
+#
+#        #The endpoints role discovers targets from listed endpoints of a service. For each
+#        #endpoint address one target is discovered per port. If the endpoint is backed by
+#        #a pod, all additional container ports of the pod, not bound to an endpoint port,
+#        #are discovered as targets as well
+#        - role: endpoints
+#        relabel_configs:
+#        #
+#        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+#          regex: true
+#          action: keep
+#        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+#          action: replace
+#          target_label: __scheme__
+#          regex: (https?)
+#        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+#          action: replace
+#          target_label: __metrics_path__
+#          regex: (.+)
+#        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+#          action: replace
+#          target_label: __address__
+#          regex: (.+)(?::\d+);(\d+)
+#          replacement: $1:$2
+#        - action: labelmap
+#          regex: __meta_kubernetes_service_label_(.+)
+#        - source_labels: [__meta_kubernetes_namespace]
+#          action: replace
+#          target_label: kubernetes_namespace
+#        - source_labels: [__meta_kubernetes_service_name]
+#          action: replace
+#          target_label: kubernetes_name
+
+#      - job_name: 'kubernetes-pods'
+#        tls_config:
+#          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+#        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+#        kubernetes_sd_configs:
+#        - role: pod
+#        relabel_configs:
+#        - source_labels: [__meta_kubernetes_role, __meta_kubernetes_pod_annotation_prometheus_io_scrape]
+#          action: keep
+#          regex: pod;true
+#        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+#          action: replace
+#          regex: ([^:]+)(?::\d+)?;(\d+)
+#          replacement: $1:$2
+#          target_label: __address__
+#        - action: labelmap
+#          regex: __meta_kubernetes_pod_label_(.+)
+#        - source_labels: [__meta_kubernetes_namespace]
+#          action: replace
+#          target_label: kubernetes_namespace
+#        - source_labels: [__meta_kubernetes_pod_name]
+#          action: replace
+#          target_label: kubernetes_pod_name
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules-config
+  namespace: monitoring
+data:
+  alertmanager.rules: |+
+    groups:
+    - name: alertmanager.rules
+      rules:
+      - alert: AlertmanagerReloadFailed
+        expr: alertmanager_config_last_reload_successful == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: Reloading Alertmanager's configuration has failed for {{ $labels.namespace
+            }}/{{ $labels.pod}}.
+          summary: Alertmanager configuration reload has failed
+  etcd3.rules: |+
+    groups:
+    - name: etcd.rules
+      rules:
+      - alert: InsufficientMembers
+        expr: count(up{job="etcd"} == 0) > (count(up{job="etcd"}) / 2 - 1)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          description: If one more etcd member goes down the cluster will be unavailable
+          summary: etcd cluster insufficient members
+      - alert: NoLeader
+        expr: etcd_server_has_leader{job="etcd"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: etcd member {{ $labels.instance }} has no leader
+          summary: etcd member has no leader
+      - alert: HighNumberOfLeaderChanges
+        expr: increase(etcd_server_leader_changes_seen_total{job="etcd"}[1h]) > 3
+        labels:
+          severity: warning
+        annotations:
+          description: etcd instance {{ $labels.instance }} has seen {{ $value }} leader
+            changes within the last hour
+          summary: a high number of leader changes within the etcd cluster are happening
+      - alert: HighNumberOfFailedGRPCRequests
+        expr: sum(rate(etcd_grpc_requests_failed_total{job="etcd"}[5m])) BY (grpc_method)
+          / sum(rate(etcd_grpc_total{job="etcd"}[5m])) BY (grpc_method) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $value }}% of requests for {{ $labels.grpc_method }} failed
+            on etcd instance {{ $labels.instance }}'
+          summary: a high number of gRPC requests are failing
+      - alert: HighNumberOfFailedGRPCRequests
+        expr: sum(rate(etcd_grpc_requests_failed_total{job="etcd"}[5m])) BY (grpc_method)
+          / sum(rate(etcd_grpc_total{job="etcd"}[5m])) BY (grpc_method) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $value }}% of requests for {{ $labels.grpc_method }} failed
+            on etcd instance {{ $labels.instance }}'
+          summary: a high number of gRPC requests are failing
+      - alert: GRPCRequestsSlow
+        expr: histogram_quantile(0.99, rate(etcd_grpc_unary_requests_duration_seconds_bucket[5m]))
+          > 0.15
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          description: on etcd instance {{ $labels.instance }} gRPC requests to {{ $labels.grpc_method
+            }} are slow
+          summary: slow gRPC requests
+      - alert: HighNumberOfFailedHTTPRequests
+        expr: sum(rate(etcd_http_failed_total{job="etcd"}[5m])) BY (method) / sum(rate(etcd_http_received_total{job="etcd"}[5m]))
+          BY (method) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $value }}% of requests for {{ $labels.method }} failed on etcd
+            instance {{ $labels.instance }}'
+          summary: a high number of HTTP requests are failing
+      - alert: HighNumberOfFailedHTTPRequests
+        expr: sum(rate(etcd_http_failed_total{job="etcd"}[5m])) BY (method) / sum(rate(etcd_http_received_total{job="etcd"}[5m]))
+          BY (method) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $value }}% of requests for {{ $labels.method }} failed on etcd
+            instance {{ $labels.instance }}'
+          summary: a high number of HTTP requests are failing
+      - alert: HTTPRequestsSlow
+        expr: histogram_quantile(0.99, rate(etcd_http_successful_duration_seconds_bucket[5m]))
+          > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: on etcd instance {{ $labels.instance }} HTTP requests to {{ $labels.method
+            }} are slow
+          summary: slow HTTP requests
+      - alert: EtcdMemberCommunicationSlow
+        expr: histogram_quantile(0.99, rate(etcd_network_member_round_trip_time_seconds_bucket[5m]))
+          > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: etcd instance {{ $labels.instance }} member communication with
+            {{ $labels.To }} is slow
+          summary: etcd member communication is slow
+      - alert: HighNumberOfFailedProposals
+        expr: increase(etcd_server_proposals_failed_total{job="etcd"}[1h]) > 5
+        labels:
+          severity: warning
+        annotations:
+          description: etcd instance {{ $labels.instance }} has seen {{ $value }} proposal
+            failures within the last hour
+          summary: a high number of proposals within the etcd cluster are failing
+      - alert: HighFsyncDurations
+        expr: histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket[5m]))
+          > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: etcd instance {{ $labels.instance }} fync durations are high
+          summary: high fsync durations
+      - alert: HighCommitDurations
+        expr: histogram_quantile(0.99, rate(etcd_disk_backend_commit_duration_seconds_bucket[5m]))
+          > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: etcd instance {{ $labels.instance }} commit durations are high
+          summary: high commit durations
+  general.rules: |+
+    groups:
+    - name: general.rules
+      rules:
+      - alert: TargetDown
+        expr: 100 * (count(up == 0) BY (job) / count(up) BY (job)) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $value }}% or more of {{ $labels.job }} targets are down.'
+          summary: Targets are down
+      - alert: DeadMansSwitch
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          description: This is a DeadMansSwitch meant to ensure that the entire Alerting
+            pipeline is functional.
+          summary: Alerting DeadMansSwitch
+      - alert: TooManyOpenFileDescriptors
+        expr: 100 * (process_open_fds / process_max_fds) > 95
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $labels.job }}: {{ $labels.namespace }}/{{ $labels.pod }} ({{
+            $labels.instance }}) is using {{ $value }}% of the available file/socket descriptors.'
+          summary: too many open file descriptors
+      - record: instance:fd_utilization
+        expr: process_open_fds / process_max_fds
+      - alert: FdExhaustionClose
+        expr: predict_linear(instance:fd_utilization[1h], 3600 * 4) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $labels.job }}: {{ $labels.namespace }}/{{ $labels.pod }} ({{
+            $labels.instance }}) instance will exhaust in file/socket descriptors soon'
+          summary: file descriptors soon exhausted
+      - alert: FdExhaustionClose
+        expr: predict_linear(instance:fd_utilization[10m], 3600) > 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $labels.job }}: {{ $labels.namespace }}/{{ $labels.pod }} ({{
+            $labels.instance }}) instance will exhaust in file/socket descriptors soon'
+          summary: file descriptors soon exhausted
+  job.rules: |+
+    groups:
+    - name: job.rules
+      rules:
+      - alert: CronJobRunning
+        expr: time() -kube_cronjob_next_schedule_time > 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          description: CronJob {{$labels.namespaces}}/{{$labels.cronjob}} is taking more than 1h to complete
+          summary: CronJob didn't finish after 1h
+      - alert: JobCompletion
+        expr: kube_job_spec_completions - kube_job_status_succeeded  > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          description: Job completion is taking more than 1h to complete
+            cronjob {{$labels.namespaces}}/{{$labels.job}}
+          summary: Job {{$labels.job}} didn't finish to complete after 1h
+      - alert: JobFailed
+        expr: kube_job_status_failed  > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          description: Job {{$labels.namespaces}}/{{$labels.job}} failed to complete
+          summary: Job failed
+  kube-apiserver.rules: |+
+    groups:
+    - name: kube-apiserver.rules
+      rules:
+      - alert: K8SApiserverDown
+        expr: absent(up{job="kube-apiservers"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          description: Prometheus failed to scrape API server(s), or all API servers have
+            disappeared from service discovery.
+          summary: API server unreachable
+      - alert: K8SApiServerLatency
+        expr: histogram_quantile(0.99, sum(apiserver_request_latencies_bucket{subresource!="log",verb!~"CONNECT|WATCHLIST|WATCH|PROXY"})
+          WITHOUT (instance, resource)) / 1e+06 > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: 99th percentile Latency for {{ $labels.verb }} requests to the
+            kube-apiserver is higher than 1s.
+          summary: Kubernetes apiserver latency is high
+  kube-controller-manager.rules: |+
+    groups:
+    - name: kube-controller.rules
+      rules:
+      - alert: K8SControllerManagerDown
+        expr: absent(up{job="kube-controller-manager"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          description: There is no running K8S controller manager. Deployments and replication
+            controllers are not making progress.
+          runbook: https://coreos.com/tectonic/docs/latest/troubleshooting/controller-recovery.html#recovering-a-controller-manager
+          summary: Controller manager is down
+  kube-scheduler.rules: |+
+    groups:
+    - name: kube-scheduler.rules
+      rules:
+      - alert: K8SSchedulerDown
+        expr: absent(up{job="kube-scheduler"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          description: There is no running K8S scheduler. New pods are not being assigned
+            to nodes.
+          runbook: https://coreos.com/tectonic/docs/latest/troubleshooting/controller-recovery.html#recovering-a-scheduler
+          summary: Scheduler is down
+  kube-state-metrics.rules: |+
+    groups:
+    - name: kube-state-metrics.rules
+      rules:
+      - alert: DeploymentGenerationMismatch
+        expr: kube_deployment_status_observed_generation != kube_deployment_metadata_generation
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          description: Observed deployment generation does not match expected one for
+            deployment {{$labels.namespaces}}/{{$labels.deployment}}
+          summary: Deployment is outdated
+      - alert: DeploymentReplicasNotUpdated
+        expr: ((kube_deployment_status_replicas_updated != kube_deployment_spec_replicas)
+          or (kube_deployment_status_replicas_available != kube_deployment_spec_replicas))
+          unless (kube_deployment_spec_paused == 1)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          description: Replicas are not updated and available for deployment {{$labels.namespaces}}/{{$labels.deployment}}
+          summary: Deployment replicas are outdated
+      - alert: DaemonSetRolloutStuck
+        expr: kube_daemonset_status_number_ready / kube_daemonset_status_desired_number_scheduled
+          * 100 < 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          description: Only {{$value}}% of desired pods scheduled and ready for daemon
+            set {{$labels.namespaces}}/{{$labels.daemonset}}
+          summary: DaemonSet is missing pods
+      - alert: K8SDaemonSetsNotScheduled
+        expr: kube_daemonset_status_desired_number_scheduled - kube_daemonset_status_current_number_scheduled
+          > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: A number of daemonsets are not scheduled.
+          summary: Daemonsets are not scheduled correctly
+      - alert: DaemonSetsMissScheduled
+        expr: kube_daemonset_status_number_misscheduled > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: A number of daemonsets are running where they are not supposed
+            to run.
+          summary: Daemonsets are not scheduled correctly
+      - alert: PodFrequentlyRestarting
+        expr: increase(kube_pod_container_status_restarts[1h]) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: Pod {{$labels.namespaces}}/{{$labels.pod}} is was restarted {{$value}}
+            times within the last hour
+          summary: Pod is restarting frequently
+      - alert: KubeNodeNotReady
+        expr: kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          message: '{{ $labels.node }} has been unready for more than an hour'
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodenotready
+      - alert: K8SManyNodesNotReady
+        expr: count(kube_node_status_condition{condition="Ready",status="true"} == 0)
+          > 1 and (count(kube_node_status_condition{condition="Ready",status="true"} ==
+          0) / count(kube_node_status_condition{condition="Ready",status="true"})) > 0.5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $value }} Kubernetes nodes (more than 10% are in the NotReady
+            state).'
+          summary: Many Kubernetes nodes are Not Ready
+  kubelet.rules: |+
+    groups:
+    - name: kubelet.rules
+      rules:
+      - alert: K8SKubeletDown
+        expr: count(up{job="kubelet"} == 0) / count(up{job="kubelet"}) > 0.03
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          description: Prometheus failed to scrape {{ $value }}% of kubelets.
+          summary: Many Kubelets cannot be scraped
+      - alert: K8SManyKubeletDown
+        expr: absent(up{job="kubelet"} == 1) or count(up{job="kubelet"} == 0) / count(up{job="kubelet"})
+          > 0.5
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          description: Prometheus failed to scrape {{ $value }}% of kubelets, or all Kubelets
+            have disappeared from service discovery.
+          summary: Many Kubelets cannot be scraped
+      - alert: K8SKubeletTooManyPods
+        expr: kubelet_running_pod_count > 100
+        labels:
+          severity: warning
+        annotations:
+          description: Kubelet {{$labels.instance}} is running {{$value}} pods, close
+            to the limit of 110
+          summary: Kubelet is close to pod limit
+  kubernetes.rules: |+
+    groups:
+    - name: kubernetes.rules
+      rules:
+      - record: cluster_namespace_controller_pod_container:spec_memory_limit_bytes
+        expr: sum(label_replace(container_spec_memory_limit_bytes{container_name!=""},
+          "controller", "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace,
+          controller, pod_name, container_name)
+      - record: cluster_namespace_controller_pod_container:spec_cpu_shares
+        expr: sum(label_replace(container_spec_cpu_shares{container_name!=""}, "controller",
+          "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace, controller, pod_name,
+          container_name)
+      - record: cluster_namespace_controller_pod_container:cpu_usage:rate
+        expr: sum(label_replace(irate(container_cpu_usage_seconds_total{container_name!=""}[5m]),
+          "controller", "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace,
+          controller, pod_name, container_name)
+      - record: cluster_namespace_controller_pod_container:memory_usage:bytes
+        expr: sum(label_replace(container_memory_usage_bytes{container_name!=""}, "controller",
+          "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace, controller, pod_name,
+          container_name)
+      - record: cluster_namespace_controller_pod_container:memory_working_set:bytes
+        expr: sum(label_replace(container_memory_working_set_bytes{container_name!=""},
+          "controller", "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace,
+          controller, pod_name, container_name)
+      - record: cluster_namespace_controller_pod_container:memory_rss:bytes
+        expr: sum(label_replace(container_memory_rss{container_name!=""}, "controller",
+          "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace, controller, pod_name,
+          container_name)
+      - record: cluster_namespace_controller_pod_container:memory_cache:bytes
+        expr: sum(label_replace(container_memory_cache{container_name!=""}, "controller",
+          "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace, controller, pod_name,
+          container_name)
+      - record: cluster_namespace_controller_pod_container:disk_usage:bytes
+        expr: sum(label_replace(container_disk_usage_bytes{container_name!=""}, "controller",
+          "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace, controller, pod_name,
+          container_name)
+      - record: cluster_namespace_controller_pod_container:memory_pagefaults:rate
+        expr: sum(label_replace(irate(container_memory_failures_total{container_name!=""}[5m]),
+          "controller", "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace,
+          controller, pod_name, container_name, scope, type)
+      - record: cluster_namespace_controller_pod_container:memory_oom:rate
+        expr: sum(label_replace(irate(container_memory_failcnt{container_name!=""}[5m]),
+          "controller", "$1", "pod_name", "^(.*)-[a-z0-9]+")) BY (cluster, namespace,
+          controller, pod_name, container_name, scope, type)
+      - record: cluster:memory_allocation:percent
+        expr: 100 * sum(container_spec_memory_limit_bytes{pod_name!=""}) BY (cluster)
+          / sum(machine_memory_bytes) BY (cluster)
+      - record: cluster:memory_used:percent
+        expr: 100 * sum(container_memory_usage_bytes{pod_name!=""}) BY (cluster) / sum(machine_memory_bytes)
+          BY (cluster)
+      - record: cluster:cpu_allocation:percent
+        expr: 100 * sum(container_spec_cpu_shares{pod_name!=""}) BY (cluster) / sum(container_spec_cpu_shares{id="/"}
+          * ON(cluster, instance) machine_cpu_cores) BY (cluster)
+      - record: cluster:node_cpu_use:percent
+        expr: 100 * sum(rate(node_cpu{mode!="idle"}[5m])) BY (cluster) / sum(machine_cpu_cores)
+          BY (cluster)
+      - record: cluster_resource_verb:apiserver_latency:quantile_seconds
+        expr: histogram_quantile(0.99, sum(apiserver_request_latencies_bucket) BY (le,
+          cluster, job, resource, verb)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster_resource_verb:apiserver_latency:quantile_seconds
+        expr: histogram_quantile(0.9, sum(apiserver_request_latencies_bucket) BY (le,
+          cluster, job, resource, verb)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster_resource_verb:apiserver_latency:quantile_seconds
+        expr: histogram_quantile(0.5, sum(apiserver_request_latencies_bucket) BY (le,
+          cluster, job, resource, verb)) / 1e+06
+        labels:
+          quantile: "0.5"
+      - record: cluster:scheduler_e2e_scheduling_latency:quantile_seconds
+        expr: histogram_quantile(0.99, sum(scheduler_e2e_scheduling_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster:scheduler_e2e_scheduling_latency:quantile_seconds
+        expr: histogram_quantile(0.9, sum(scheduler_e2e_scheduling_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster:scheduler_e2e_scheduling_latency:quantile_seconds
+        expr: histogram_quantile(0.5, sum(scheduler_e2e_scheduling_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.5"
+      - record: cluster:scheduler_scheduling_algorithm_latency:quantile_seconds
+        expr: histogram_quantile(0.99, sum(scheduler_scheduling_algorithm_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster:scheduler_scheduling_algorithm_latency:quantile_seconds
+        expr: histogram_quantile(0.9, sum(scheduler_scheduling_algorithm_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster:scheduler_scheduling_algorithm_latency:quantile_seconds
+        expr: histogram_quantile(0.5, sum(scheduler_scheduling_algorithm_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.5"
+      - record: cluster:scheduler_binding_latency:quantile_seconds
+        expr: histogram_quantile(0.99, sum(scheduler_binding_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster:scheduler_binding_latency:quantile_seconds
+        expr: histogram_quantile(0.9, sum(scheduler_binding_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster:scheduler_binding_latency:quantile_seconds
+        expr: histogram_quantile(0.5, sum(scheduler_binding_latency_microseconds_bucket)
+          BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.5"
+  node.rules: |+
+    groups:
+    - name: node.rules
+      rules:
+      - alert: NodeExporterDown
+        expr: absent(up{job="prometheus-node-exporter"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: Prometheus could not scrape a node-exporter for more than 10m,
+            or node-exporters have disappeared from discovery.
+          summary: node-exporter cannot be scraped
+      - alert: K8SNodeOutOfDisk
+        expr: kube_node_status_condition{condition="OutOfDisk",status="true"} == 1
+        labels:
+          service: k8s
+          severity: critical
+        annotations:
+          description: '{{ $labels.node }} has run out of disk space.'
+          summary: Node ran out of disk space.
+      - alert: K8SNodeMemoryPressure
+        expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+        labels:
+          service: k8s
+          severity: warning
+        annotations:
+          description: '{{ $labels.node }} is under memory pressure.'
+          summary: Node is under memory pressure.
+      - alert: K8SNodeDiskPressure
+        expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+        labels:
+          service: k8s
+          severity: warning
+        annotations:
+          description: '{{ $labels.node }} is under disk pressure.'
+          summary: Node is under disk pressure.
+      - alert: NodeCPUUsage
+        expr: (100 - (avg by (instance) (irate(node_cpu_seconds_total{job="prometheus-node-exporter",mode="idle"}[5m])) * 100)) > 90
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{$labels.instance}}: High CPU usage detected"
+          description: "{{$labels.instance}}: CPU usage is above 90% (current value is: {{ $value }})"
+      - alert: NodeMemoryUsage
+        expr: (((node_memory_MemTotal_bytes-node_memory_MemFree_bytes-node_memory_Cached_bytes)/(node_memory_MemTotal_bytes)*100)) > 90
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{$labels.instance}}: High memory usage detected"
+          description: "{{$labels.instance}}: Memory usage is above 90% (current value is: {{ $value }})"
+  prometheus.rules: |+
+    groups:
+    - name: prometheus.rules
+      rules:
+      - alert: PrometheusReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: Reloading Prometheus' configuration has failed for {{ $labels.namespace
+            }}/{{ $labels.pod}}.
+          summary: Prometheus configuration reload has failed
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  namespace: monitoring
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  serviceName: prometheus
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      name: prometheus
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+#      hostNetwork: true
+      containers:
+      - name: prometheus
+        #image: prom/prometheus:v2.3.2
+        image: hub.qoros.com/library/prometheus:v2.3.2
+        imagePullPolicy: IfNotPresent
+        args:
+          - '--storage.tsdb.path=/prometheus/data/'
+          - '--storage.tsdb.retention=1d'
+          - '--config.file=/etc/prometheus/prometheus.yaml'
+          - '--web.enable-lifecycle'
+        ports:
+        - name: webui
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2G
+#          limits:
+#            cpu: 500m
+#            memory: 2G
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus
+        - name: rules-volume
+          mountPath: /etc/prometheus-rules
+        - name: etcd-certs
+          mountPath: /etc/etcd-certs
+        - name: data-volume
+          mountPath: /prometheus/data
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-config
+      - name: rules-volume
+        configMap:
+          name: prometheus-rules-config
+      - name: etcd-certs
+        secret:
+          secretName: etcd-certs
+#      nodeSelector:
+#        nodeRole: "monitor"
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        effect: "NoSchedule"
+  volumeClaimTemplates:
+  - metadata:
+      name: data-volume
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "managed-nfs-storage"
+      resources:
+        requests:
+          storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  type: NodePort
+#  type: ClusterIP
+  ports:
+    - name: webui
+      port: 9090
+      protocol: TCP
+      #nodePort: 30006
+  selector:
+    app: prometheus
+
