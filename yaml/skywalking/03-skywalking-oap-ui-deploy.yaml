@@ -85,7 +85,7 @@ spec:
               name: page
           env:
             - name: SW_OAP_ADDRESS
-              value: oap:12800
+              value: oap.skywalking:12800
 ---
 apiVersion: v1
 kind: Service
