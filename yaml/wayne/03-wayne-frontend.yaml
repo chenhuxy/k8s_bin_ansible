@@ -8,7 +8,7 @@ metadata:
 data:
   config.js: |-
     window.CONFIG = {
-      URL: 'http://10.58.133.11:30007',
+      URL: 'http://10.58.133.11:30004',
       RAVEN: false,
       RAVEN_DSN: 'RAVEN_DSN'
     };
@@ -41,7 +41,7 @@ spec:
       containers:
       - name: wayne
         #image: '360cloud/wayne-frontend:latest'
-        image: 'hub.qoros.com/library/wayne-frontend:latest'
+        image: 'hub.qoros.com/library/wayne-frontend:v1.8.6'
         resources:
           limits:
             cpu: '0.5'

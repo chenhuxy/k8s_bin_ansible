@@ -81,7 +81,7 @@ spec:
       containers:
       - name: wayne
         #image: '360cloud/wayne-backend:latest'
-        image: 'hub.qoros.com/library/wayne-backend:latest'
+        image: 'hub.qoros.com/library/wayne-backend:v1.8.6'
         command:
         - /opt/wayne/backend
         - apiserver
