@@ -27,18 +27,27 @@ spec:
               name: grpc
             - containerPort: 12800
               name: rest
-      #    volumeMounts:
-      #    - name: config
-      #      mountPath: /skywalking/config
-          env:
-          - name: SW_STORAGE
-            value: elasticsearch7
-          - name: SW_STORAGE_ES_CLUSTER_NODES
-            value: 10.58.133.2:32000
-      #volumes:
-      #  - name: config
-      #    configMap:
-      #      name: skywalking-oap-conf  
+          volumeMounts:
+          - name: application-config
+            mountPath: /skywalking/config/application.yml
+            subPath: application.yml
+            readOnly: false
+          - name: alarm-settings-config
+            mountPath: /skywalking/config/alarm-settings.yml
+            subPath: alarm-settings.yml
+            readOnly: false
+      #    env:
+      #    - name: SW_STORAGE
+      #      value: elasticsearch7
+      #    - name: SW_STORAGE_ES_CLUSTER_NODES
+      #      value: 10.58.133.11:30015
+      volumes:
+        - name: application-config
+          configMap:
+            name: application-config 
+        - name: alarm-settings-config
+          configMap:
+            name: alarm-settings-config 
 ---
 apiVersion: v1
 kind: Service
@@ -86,7 +95,7 @@ spec:
           env:
             - name: SW_OAP_ADDRESS
               #value: oap.skywalking:12800
-              value: 10.58.133.2:30128
+              value: 10.58.133.11:30016
 ---
 apiVersion: v1
 kind: Service
