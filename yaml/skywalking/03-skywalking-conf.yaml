@@ -231,7 +231,7 @@ data:
       elasticsearch7:
         nameSpace: ${SW_NAMESPACE:""}
         #clusterNodes: ${SW_STORAGE_ES_CLUSTER_NODES:localhost:9200}
-        clusterNodes: ${SW_STORAGE_ES_CLUSTER_NODES:10.58.133.11:30015}
+        clusterNodes: ${SW_STORAGE_ES_CLUSTER_NODES:elasticsearch-service-http.loging:9200}
         protocol: ${SW_STORAGE_ES_HTTP_PROTOCOL:"http"}
         trustStorePath: ${SW_STORAGE_ES_SSL_JKS_PATH:""}
         trustStorePass: ${SW_STORAGE_ES_SSL_JKS_PASS:""}
